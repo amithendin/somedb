@@ -8,7 +8,8 @@ use serde_json::Value;
 pub struct Config {
     pub file_name: String,
     pub file_format: DiskFormat,
-    pub port: u32
+    pub port: u32,
+    pub threads: usize
 }
 
 
@@ -20,7 +21,8 @@ impl Config {
             let config = Config {
                 file_name: "./db.bin".to_owned(),
                 file_format: DiskFormat::Bin,
-                port: 4000
+                port: 4000,
+                threads: 8
             };
 
             match OpenOptions::new().create(true).write(true).open(path.to_owned()) {

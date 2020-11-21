@@ -6,6 +6,15 @@ extern crate serde_json;
 extern crate serde_derive;
 extern crate csv;
 
+use std::thread;
+use std::net::{TcpListener, TcpStream, Shutdown};
+use std::io::{Read, Write};
+use std::intrinsics::write_bytes;
+use threadpool::ThreadPool;
+use std::sync::{Arc, RwLock, PoisonError, RwLockReadGuard, RwLockWriteGuard};
+
+use crate::disk::DiskFormat;
+
 mod space;
 use space::{Space, Node, Entity, Value};
 
@@ -43,18 +52,10 @@ fn ent_to_json(ent: &Entity, space: &Space) -> String {
     json
 }
 
-fn execute_transaction(space: &mut Space, t: &Transaction) -> Vec<u8> {
+fn execute_read(space: &RwLockReadGuard<Space>, t: &Transaction) -> Vec<u8> {
     let mut id_bytes = vec![0u8; Transaction::UINT_SIZE()];
 
     match t.cmd {
-        Command::Create => {
-            let new_obj = space.create();
-             write_usize(new_obj)
-        },
-        Command::Set => {
-            space.set(t.obj, t.key.as_str(), t.val.as_str());
-            [id_bytes, "ok".as_bytes().to_vec()].concat()
-        },
         Command::Get => {
             let n = space.get(t.obj, t.key.as_str());
             match n {
@@ -73,21 +74,33 @@ fn execute_transaction(space: &mut Space, t: &Transaction) -> Vec<u8> {
                 None => [id_bytes, "null".as_bytes().to_vec()].concat()
             }
         },
-        Command::Link => {
-            space.link(t.obj, t.key.as_str(), t.othr);
-            [id_bytes,"ok".as_bytes().to_vec()].concat()
-        },
+        _ => panic!("wrong function buddy. You need execute_write"),
 
     }
 }
 
-use std::thread;
-use std::net::{TcpListener, TcpStream, Shutdown};
-use std::io::{Read, Write};
-use std::intrinsics::write_bytes;
-use crate::disk::DiskFormat;
+fn execute_write(space: &mut RwLockWriteGuard<Space>, t: &Transaction) -> Vec<u8> {
+    let mut id_bytes = vec![0u8; Transaction::UINT_SIZE()];
 
-fn handle_connection(disk: &Disk, space: &mut Space, mut stream: TcpStream) {
+    match t.cmd {
+        Command::Create => {
+            let new_obj = space.create();
+             write_usize(new_obj)
+        },
+        Command::Set => {
+            space.set(t.obj, t.key.as_str(), t.val.as_str());
+            [id_bytes, "ok".as_bytes().to_vec()].concat()
+        },
+        Command::Link => {
+            space.link(t.obj, t.key.as_str(), t.othr);
+            [id_bytes,"ok".as_bytes().to_vec()].concat()
+        },
+        _ => panic!("wrong function buddy. You need execute_read")
+    }
+}
+
+
+fn connection_to_transaction (stream: &mut TcpStream) -> Result<Transaction, String> {
     let mut data_size = 0;
     let mut data_size_buf = [0u8; 8];
 
@@ -96,27 +109,13 @@ fn handle_connection(disk: &Disk, space: &mut Space, mut stream: TcpStream) {
             data_size = read_usize(&data_size_buf);
             println!("[RX] {} ( {} bytes )", stream.peer_addr().unwrap(), data_size);
         },
-        Err(e) => {
-            stream.shutdown(Shutdown::Both).unwrap();
-            println!("RX error occurred, terminating connection with {} because {}", stream.peer_addr().unwrap(), e);
-            return;
-        }
+        Err(e) => return Err(format!("{}", e))
     };
 
     let mut data = vec![0u8; data_size];
     match stream.read_exact(&mut data) {
-        Ok(_) => {
-            let t = Transaction::from(data);
-            let resp = execute_transaction(space, &t);
-            disk.log_transaction(&t);
-
-            println!("[TX] {} ( {} bytes )",stream.peer_addr().unwrap(), resp.len());
-            stream.write(resp.as_slice()).unwrap();
-        },
-        Err(e) => {
-            println!("RX error occurred, terminating connection with {} because {}", stream.peer_addr().unwrap(), e);
-            stream.shutdown(Shutdown::Both).unwrap();
-        }
+        Ok(_) => Ok(Transaction::from(data)),
+        Err(e) => Err(format!("{}", e))
     }
 }
 
@@ -125,10 +124,34 @@ fn main() {
     let mut space = Space::new();
     let disk = Disk::new(config.file_name.as_str(), config.file_format);
 
+    let threadpool = ThreadPool::new(config.threads);
+
+    let space_lock = Arc::new(RwLock::new(space));
+    let disk_lock = Arc::new(RwLock::new(disk));
+
     println!("loading transactions from database file");
     let mut cnt: usize = 0;
-    for t in disk.load_transactions() {
-        execute_transaction(&mut space, &t);
+    for t in disk_lock.read().unwrap().load_transactions() {
+        match t.cmd {
+            Command::Get => {
+                let readable_space = match space_lock.read() {
+                    Ok(s) => s,
+                    Err(e) => panic!("Space lock read error {}",e)
+                };
+
+                let resp = execute_read(&readable_space, &t);
+                resp
+            },
+            Command::Create | Command::Set | Command::Link => {
+                let mut writeable_space = match space_lock.write() {
+                    Ok(s) => s,
+                    Err(e) => panic!("Space lock write error {}",e)
+                };
+                let resp = execute_write(&mut writeable_space, &t);
+
+                resp
+            }
+        };
         cnt += 1;
     }
     println!("loaded {} transactions. starting server", cnt);
@@ -137,17 +160,60 @@ fn main() {
     let listener = TcpListener::bind(addr.as_str()).unwrap();
     // accept connections and process them, spawning a new thread for each one
     println!("Server listening on port {}", config.port);
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                // connection succeeded
-                handle_connection(&disk, &mut space, stream);
-            }
-            Err(e) => {
-                println!("Error: {}", e);
-                /* connection failed */
-            }
-        }
+
+    for connection in listener.incoming() {
+        let space_lock_clone = Arc::clone(&space_lock);
+        let disk_lock_clone = Arc::clone(&disk_lock);
+
+        threadpool.execute(move || {
+            let mut stream = match connection {
+                Ok(s) => s,
+                Err(e) => {
+                    println!("Error: {}", e);
+                    return;
+                }
+            };
+
+            let t = match connection_to_transaction(&mut stream) {
+                Ok(t) => t,
+                Err(e) => {
+                    println!("RX error occurred, terminating connection with {} because {}", stream.peer_addr().unwrap(), e);
+                    stream.shutdown(Shutdown::Both).unwrap();
+                    return;
+                }
+            };
+
+            let resp = match t.cmd {
+                Command::Get => {
+                    let readable_space = match space_lock_clone.read() {
+                        Ok(s) => s,
+                        Err(e) => panic!("Space lock read error {}",e)
+                    };
+
+                    let resp = execute_read(&readable_space, &t);
+                    resp
+                },
+                Command::Create | Command::Set | Command::Link => {
+                    let mut writeable_space = match space_lock_clone.write() {
+                        Ok(s) => s,
+                        Err(e) => panic!("Space lock write error {}",e)
+                    };
+
+                    let resp = execute_write(&mut writeable_space, &t);
+
+                    match disk_lock_clone.write() {
+                        Ok(disk) => disk.log_transaction(&t),
+                        Err(e) => panic!("Disk lock write error {}",e)
+                    };
+
+                    resp
+                }
+            };
+
+            println!("[TX] {} ( {} bytes )",stream.peer_addr().unwrap(), resp.len());
+            stream.write(resp.as_slice()).unwrap();
+        });
+
     }
     // close the socket server
     drop(listener);
