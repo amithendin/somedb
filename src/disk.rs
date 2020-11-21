@@ -76,6 +76,10 @@ impl Disk {
             File::create(path.to_owned()).unwrap();
         }
 
+        if !Path::new("./null").exists() {
+            File::create(String::from("./null")).unwrap();
+        }
+        
         Disk { path: path.to_string(), format }
     }
 
