@@ -5,6 +5,7 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 extern crate csv;
+extern crate sequencetree;
 
 use std::thread;
 use std::net::{TcpListener, TcpStream, Shutdown};

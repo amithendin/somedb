@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::thread::sleep;
 
+use sequencetree::SequenceTree;
+
 #[derive(Debug)]
 pub struct Entity {
     pub props: HashMap<String, usize>
@@ -19,7 +21,7 @@ pub enum Node {
 
 pub struct Space {
     pub nodes: HashMap<usize, Node>,
-    pub reverse: HashMap<String, usize>,
+    pub reverse: SequenceTree<char, usize>,
     id_cnt: usize
 }
 
@@ -27,7 +29,7 @@ impl Space {
     pub fn new() -> Space {
         Space {
             nodes: HashMap::new(),
-            reverse: HashMap::new(),
+            reverse: SequenceTree::new(),
             id_cnt: 0
         }
     }
@@ -49,14 +51,14 @@ impl Space {
     fn create_prop(&mut self, val: String) -> usize {
         let id = self.gen_id();
 
-        self.reverse.insert(val.to_owned(), id);
+        self.reverse.set(val.chars().collect(), id);
         self.nodes.insert(id, Node::Value( Value { val } ) );
 
         id
     }
 
     fn upsert_prop(&mut self, value: &str) -> usize {
-        match self.reverse.get(value) {
+        match self.reverse.get(value.chars().collect()) {
             Some(id) => id.to_owned(),
             None => self.create_prop(value.to_string())
         }
