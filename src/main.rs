@@ -30,14 +30,20 @@ mod config;
 
 use config::Config;
 
-fn ent_to_json(ent: &Entity, space: &Space) -> String {
+fn ent_to_json(ent: &Entity, space: &Space, shallowmode: bool) -> String {
     let mut json = String::from("{");
 
     for (name, id) in &ent.props {
         let prop_str = match space.nodes.get(id) {
             Some(n) => {
                 match n {
-                    Node::Entity(sub) => format!("\"{}\": {},", name, ent_to_json(sub, space)),
+                    Node::Entity(sub) => {
+                        if shallowmode {
+                            format!("\"{}\": {},", name, id)
+                        }else {
+                            format!("\"{}\": {},", name, ent_to_json(sub, space, shallowmode))
+                        }
+                    },
                     Node::Value(v) => format!("\"{}\":\"{}\",", name, v.val.escape_default().to_owned())
                 }
             },
@@ -55,16 +61,16 @@ fn ent_to_json(ent: &Entity, space: &Space) -> String {
 
 fn execute_read(space: &RwLockReadGuard<Space>, t: &Transaction) -> Vec<u8> {
     let mut id_bytes = vec![0u8; Transaction::UINT_SIZE()];
-
+    let cmd = t.cmd.clone();
     match t.cmd {
-        Command::Get => {
+        Command::Get | Command::GetRaw => {
             let n = space.get(t.obj, t.key.as_str());
             match n {
                 Some((id, node)) => {
                     id_bytes = write_usize(id);
                     match node {
                         Node::Entity(ent) => {
-                            let str = ent_to_json(ent, &space);
+                            let str = ent_to_json(ent, &space, cmd == Command::GetRaw);
                             [id_bytes, write_string(str)].concat()
                         }
                         Node::Value(v) => {
@@ -134,7 +140,7 @@ fn main() {
     let mut cnt: usize = 0;
     for t in disk_lock.read().unwrap().load_transactions() {
         match t.cmd {
-            Command::Get => {
+            Command::Get | Command::GetRaw => {
                 let readable_space = match space_lock.read() {
                     Ok(s) => s,
                     Err(e) => panic!("Space lock read error {}",e)
@@ -185,7 +191,7 @@ fn main() {
             };
 
             let resp = match t.cmd {
-                Command::Get => {
+                Command::Get | Command::GetRaw => {
                     let readable_space = match space_lock_clone.read() {
                         Ok(s) => s,
                         Err(e) => panic!("Space lock read error {}",e)

@@ -4,12 +4,13 @@ use serde::{Serialize, Serializer, Deserialize, Deserializer};
 
 const UNIT_SIZE: u8 = 8;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Command {
     Create,
     Set,
     Get,
-    Link
+    Link,
+    GetRaw
 }
 
 impl<'de> Deserialize<'de> for Command {
@@ -39,6 +40,7 @@ impl Command {
             1 => Command::Set,
             2 => Command::Get,
             3 => Command::Link,
+            4 => Command::GetRaw,
             _=> panic!("unsupported command {}", n)
         }
     }
@@ -48,7 +50,8 @@ impl Command {
             Command::Create => 0,
             Command::Set => 1,
             Command::Get => 2,
-            Command::Link => 3
+            Command::Link => 3,
+            Command::GetRaw => 4
         }
     }
 }
@@ -94,7 +97,7 @@ impl Transaction {
 
                 Self::new(cmd, obj, key, value, 0)
 
-            }else if data[0] == 3 {
+            }else if data[0] == 3 || data[0] == 4 {
                 let other_node = read_usize(&data[(usize_size * 3 + 1 + key_size)..(usize_size * 4 + 1 + key_size)]);
 
                 Self::new(cmd, obj, key, String::new(), other_node)
