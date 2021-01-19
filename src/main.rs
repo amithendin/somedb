@@ -59,53 +59,103 @@ fn ent_to_json(ent: &Entity, space: &Space, shallowmode: bool) -> String {
     json
 }
 
-fn execute_read(space: &RwLockReadGuard<Space>, t: &Transaction) -> Vec<u8> {
+fn _exec_read(space: &RwLockReadGuard<Space>, t: &Transaction, keys: Vec<&str>, ki: usize, curr_obj: usize) -> Vec<u8> {
     let mut id_bytes = vec![0u8; Transaction::UINT_SIZE()];
+
+    if ki > keys.len() - 1 {
+        println!("exit 1 {}/{} {:?}", ki, keys.len(), keys);
+        return [id_bytes, "null".as_bytes().to_vec()].concat()
+    }
+
+    let curr_key = keys[ki];
+
     let cmd = t.cmd.clone();
     match t.cmd {
         Command::Get | Command::GetRaw => {
-            let n = space.get(t.obj, t.key.as_str());
+            let n = space.get(curr_obj, curr_key);
+            println!("{:?} {} '{}'",n,curr_obj,curr_key);
             match n {
                 Some((id, node)) => {
                     id_bytes = write_usize(id);
                     match node {
                         Node::Entity(ent) => {
-                            let str = ent_to_json(ent, &space, cmd == Command::GetRaw);
-                            [id_bytes, write_string(str)].concat()
+                            if ki == keys.len() - 1 || curr_key.len() == 0 {
+                                let str = ent_to_json(ent, &space, cmd == Command::GetRaw);
+                                [id_bytes, write_string(str)].concat()
+                            }else {
+                                _exec_read(space, t, keys, ki+1, id)
+                            }
                         }
                         Node::Value(v) => {
-                            [id_bytes, write_string(v.val.to_owned())].concat()
+                            if ki == keys.len() - 1 || curr_key.len() == 0 {
+                                [id_bytes, write_string(v.val.to_owned())].concat()
+                            }else {
+                                println!("exit 2 {}/{} {:?}", ki, keys.len(), keys);
+                                [id_bytes, "null".as_bytes().to_vec()].concat()
+                            }
                         }
                     }
                 },
-                None => [id_bytes, "null".as_bytes().to_vec()].concat()
+                None => { println!("exit 3 {}/{} {:?}", ki, keys.len(), keys); [id_bytes, "null".as_bytes().to_vec()].concat() }
             }
         },
         _ => panic!("wrong function buddy. You need execute_write"),
+    }
+}
 
+fn execute_read(space: &RwLockReadGuard<Space>, t: &Transaction) -> Vec<u8> {
+    _exec_read(space, t, t.key.split(".").collect(), 0, t.obj)
+}
+
+fn _exec_write(space: &mut RwLockWriteGuard<Space>, t: &Transaction, keys: Vec<&str>, ki: usize, curr_obj: usize) -> Vec<u8> {
+    let mut id_bytes = vec![0u8; Transaction::UINT_SIZE()];
+
+    if ki > keys.len() - 1{
+        return [id_bytes, "fail".as_bytes().to_vec()].concat()
+    }
+
+    let curr_key = keys[ki];
+
+    if ki == keys.len() - 1 || curr_key.len() == 0 {
+        return match t.cmd {
+            Command::Create => {
+
+                let new_obj = space.create();
+                write_usize(new_obj)
+            },
+            Command::Set => {
+                space.set(curr_obj, curr_key, t.val.as_str());
+                [id_bytes, "ok".as_bytes().to_vec()].concat()
+            },
+            Command::Link => {
+                space.link(curr_obj, curr_key, t.othr);
+                [id_bytes,"ok".as_bytes().to_vec()].concat()
+            },
+            _ => panic!("wrong function buddy. You need execute_read")
+        }
+    }
+
+    let n = space.get(curr_obj, curr_key);
+    match n {
+        Some((id, node)) => {
+            id_bytes = write_usize(id);
+
+            match node {
+                Node::Entity(ent) => {
+                    _exec_write(space, t, keys, ki+1, id)
+                }
+                Node::Value(v) => {
+                    [id_bytes, "fail".as_bytes().to_vec()].concat()
+                }
+            }
+        },
+        None => [id_bytes, "fail".as_bytes().to_vec()].concat()
     }
 }
 
 fn execute_write(space: &mut RwLockWriteGuard<Space>, t: &Transaction) -> Vec<u8> {
-    let mut id_bytes = vec![0u8; Transaction::UINT_SIZE()];
-
-    match t.cmd {
-        Command::Create => {
-            let new_obj = space.create();
-             write_usize(new_obj)
-        },
-        Command::Set => {
-            space.set(t.obj, t.key.as_str(), t.val.as_str());
-            [id_bytes, "ok".as_bytes().to_vec()].concat()
-        },
-        Command::Link => {
-            space.link(t.obj, t.key.as_str(), t.othr);
-            [id_bytes,"ok".as_bytes().to_vec()].concat()
-        },
-        _ => panic!("wrong function buddy. You need execute_read")
-    }
+    _exec_write(space, t, t.key.split(".").collect(), 0, t.obj)
 }
-
 
 fn connection_to_transaction (stream: &mut TcpStream) -> Result<Transaction, String> {
     let mut data_size = 0;
@@ -235,7 +285,8 @@ mod tests {
     #[test]
     fn fetch() {
         let db = Client::new("localhost:4000");
-        println!("{}", db.get_obj(1).1);
+        //db.set(1, "achivements.1.title", "aob-new");
+        println!("{:?}", db.get_str(1, "achivements.0"));
     }
 
     #[test]
