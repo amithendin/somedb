@@ -341,7 +341,7 @@ mod tests {
             "age": 24,
             "stats": {
                 "employment": "null",
-                "thebest": true
+                "madethis": true
             },
             "achivements": [
                 {

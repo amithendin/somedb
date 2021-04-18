@@ -2,7 +2,7 @@ use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
 use std::io::Cursor;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 
-const UNIT_SIZE: u8 = 8;
+const UINT_SIZE: u8 = 8;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Command {
