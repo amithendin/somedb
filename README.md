@@ -14,6 +14,7 @@ Supported data types are currently only strings and u64 while objects are return
 formatted string (without indentation).
 
 ###How to use
+
 I honestly felt this project was too early in development to publish a separate project dedicated to the
 client so for now they way to use this is kinda hacky and only works in rust but the communication data format is pretty 
 simple and should be easy to implement in any popular language.
