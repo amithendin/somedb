@@ -93,7 +93,9 @@ __file_format__
 the format in which the database will read and write transactions to the file.
 avaible options are: "CSV", "Bin"
 in "CSV" mode the transactions will be saved as a table of
-<command>,<object id>,<key>,<value>,<object id>
+
+< command > , < object id > , < key > , < value > , < object id >
+
 in "Bin" mode transactions will be saved in binary format
 when the database starts up it will read from the configured file in the 
 configured format so you will get an error if you wrote data in one mode
