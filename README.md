@@ -105,7 +105,7 @@ you have to start a new file
 __port__
 
 the port the database will listen on. Uses the TCP protocol and uses internal
-protocol for parsing in-coming data. out-going data is sent in raw bytes.
+protocol for parsing in-coming and out-going data.
 
 __threads__
 
