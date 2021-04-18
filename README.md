@@ -13,7 +13,7 @@ be eliminated by some basic restructuring.
 Supported data types are currently only strings and u64 while objects are returned as a json
 formatted string (without indentation).
 
-###How to use
+### How to use
 
 I honestly felt this project was too early in development to publish a separate project dedicated to the
 client so for now they way to use this is kinda hacky and only works in rust but the communication data format is pretty 
@@ -49,7 +49,7 @@ println!("get {:?}", db.get_str(obj, "child"));
 
 ```
 
-###Commands
+### Commands
 __Create__
 
 creates a new object and returns it's id (no input)
@@ -80,7 +80,7 @@ of depth version of the objects with the ids of the nested objects in the value 
 This is so you can work deep within the object without having to fetch and send the entire object back and forth between
 the client and the database.
 
-###Configuration
+### Configuration
 when the database is started a small file named "config.json" is automatically created
 containing the configuration options. Any changes to said file will take effect upon restart of the program.
 
@@ -110,7 +110,7 @@ __threads__
 the maximun number of threads the database will use. Not that this is a mutli-reader
 single-write system so allocatiing more threads will not speed up write operations.
 
-###The Point of this project
+### The Point of this project
 To create a lightweight minimal fast persistent storage software. The approach I have
 chosen is to lean heavily on the concept of pointers. The user (perhaps you?) is encouraged to
 fetch or modify the exact bit of data he/she needs at a specific point working within the object
@@ -126,7 +126,7 @@ the memory more per key, but still the runtime of an call to a specific key is p
 key and not the size of the collection, same as in hashtables since in every hash function one must iterate over the 
 various elements of the key to calculate it's hash number.
 
-####Disclaimer
+#### Disclaimer
 This software is in very early development and has not been through proper testing, and also 
 may undergo series modifications in the future, I suggest to use it only in small hobby projects or simply for benchmarking, as I have yet to benchmark it myself.
 Feedback and contributions are welcome.
