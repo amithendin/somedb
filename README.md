@@ -116,7 +116,7 @@ chosen is to lean heavily on the concept of pointers. The user (perhaps you?) is
 fetch or modify the exact bit of data he/she needs at a specific point working within the object
 as a database instead of splitting one big objects in to many objects across many collections.
 This way you can easily reuse data that is the same in different objects. Perhaps you have many users
-at age 55, instead of storing the number 55 times why not link to the same property? This can be effective
+at age 55, instead of storing the number 55 many many times why not link to the same property? This can be effective
 for many scenarios but there is a obvious danger of changing one property and affecting many objects with the intent 
 to only affect one. For this reason the databse does not automatically use the same properties for identical values but ranther
 leaves a rudimentary set of commands for the user to use differently for each perticular situation.
