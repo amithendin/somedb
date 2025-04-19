@@ -1,7 +1,6 @@
 # somedb
-Just another noSQL database
+noSQL database
 
-SomeDB is a transactional multi-reader single writer persistent database.
 SomeDB is pretty basic, going only a few steps further from a key value database.
 Essentially you have objects and properties where properties are keys that point to values
 or objects, and objects are simply a collection of properties.
@@ -14,10 +13,6 @@ Supported data types are currently only strings and u64 while objects are return
 formatted string (without indentation).
 
 ### How to use
-
-I honestly felt this project was too early in development to publish a separate project dedicated to the
-client so for now they way to use this is kinda hacky and only works in rust but the communication data format is pretty 
-simple and should be easy to implement in any popular language.
 
 first create a module with a directory for the client in you project
 copy the client.rs and utils.rs to the module and include them from there
